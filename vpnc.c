@@ -93,6 +93,10 @@ const unsigned char VID_NATT_02N[] = { /* "draft-ietf-ipsec-nat-t-ike-02\n" */
 	0x90, 0xCB, 0x80, 0x91, 0x3E, 0xBB, 0x69, 0x6E,
 	0x08, 0x63, 0x81, 0xB5, 0xEC, 0x42, 0x7B, 0x1F
 };
+const unsigned char VID_NATT_03[] = { /* "draft-ietf-ipsec-nat-t-ike-03" */
+	0x7d, 0x94, 0x19, 0xa6, 0x53, 0x10, 0xca, 0x6f,
+	0x2c, 0x17, 0x9d, 0x92, 0x15, 0x52, 0x9d, 0x56
+};
 const unsigned char VID_NATT_RFC[] = { /* "RFC 3947" */
 	0x4A, 0x13, 0x1C, 0x81, 0x07, 0x03, 0x58, 0x45,
 	0x5C, 0x57, 0x28, 0xF2, 0x0E, 0x95, 0x45, 0x2F
@@ -1272,6 +1276,8 @@ static void do_phase1_am(const char *key_id, const char *shared_key, struct sa_b
 			l = l->next = new_isakmp_data_payload(ISAKMP_PAYLOAD_VID,
 				VID_NATT_RFC, sizeof(VID_NATT_RFC));
 			l = l->next = new_isakmp_data_payload(ISAKMP_PAYLOAD_VID,
+				VID_NATT_03, sizeof(VID_NATT_03));
+			l = l->next = new_isakmp_data_payload(ISAKMP_PAYLOAD_VID,
 				VID_NATT_02N, sizeof(VID_NATT_02N));
 			l = l->next = new_isakmp_data_payload(ISAKMP_PAYLOAD_VID,
 				VID_NATT_02, sizeof(VID_NATT_02));
@@ -1497,6 +1503,12 @@ static void do_phase1_am(const char *key_id, const char *shared_key, struct sa_b
 					seen_natt_vid = 1;
 					if (natt_draft < 1) natt_draft = 2;
 					DEBUG(2, printf("peer is NAT-T capable (RFC 3947)\n"));
+				} else if (rp->u.vid.length == sizeof(VID_NATT_03)
+					&& memcmp(rp->u.vid.data, VID_NATT_03,
+						sizeof(VID_NATT_03)) == 0) {
+					seen_natt_vid = 1;
+					if (natt_draft < 1) natt_draft = 2;
+					DEBUG(2, printf("peer is NAT-T capable (draft-03)\n"));
 				} else if (rp->u.vid.length == sizeof(VID_NATT_02N)
 					&& memcmp(rp->u.vid.data, VID_NATT_02N,
 						sizeof(VID_NATT_02N)) == 0) {
@@ -1576,6 +1588,19 @@ static void do_phase1_am(const char *key_id, const char *shared_key, struct sa_b
 				} else {
 					if (memcmp(natd_them, rp->u.natd.data, s->ike.md_len) == 0)
 						seen_natd_them = 1;
+				}
+				break;
+			case ISAKMP_PAYLOAD_N:
+				if (rp->u.n.type == ISAKMP_N_IPSEC_RESPONDER_LIFETIME) {
+					if (rp->u.n.protocol == ISAKMP_IPSEC_PROTO_ISAKMP)
+						lifetime_ike_process(s, rp->u.n.attributes);
+					else if (rp->u.n.protocol == ISAKMP_IPSEC_PROTO_IPSEC_ESP)
+						lifetime_ipsec_process(s, rp->u.n.attributes);
+					else
+						DEBUG(2, printf("got unknown lifetime notice, ignoring..\n"));
+				} else {
+					DEBUG(1, printf("rejecting ISAKMP_PAYLOAD_N, type is not lifetime\n"));
+					reject = ISAKMP_N_INVALID_PAYLOAD_TYPE;
 				}
 				break;
 			default:
